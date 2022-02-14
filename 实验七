@@ -1,0 +1,247 @@
+1.#include <bits/stdc++.h>  
+2.using namespace std;  
+3.  
+4.string get_address(string &aLine){//得到内存中的地址  
+5.    if(aLine[0]=='f') return aLine.substr(0,16);//最后一行，直接得到  
+6.    else {//不是最后的，判断前面的数量，以这位增加0;  
+7.        int i;  
+8.        for(i=0;i<aLine.size()&&aLine[i]!='-';i++);  
+9.        int k=16-i;  
+10.        return aLine.substr(0,i).insert(0,k,'0');  
+11.    }  
+12.}  
+13.bool is_s,is_wp;  
+14.string get_Mode(string &aLine){//得到Mode的序列，判断属于wp还是S的  
+15.    is_s=0,is_wp=0;  
+16.    string Mode;  
+17.    bool is_p,is_w;  
+18.    //得到所在位置的Mode  
+19.    if(aLine[0]=='f') Mode=aLine.substr(34,4);  
+20.    else {  
+21.        string s;  
+22.        s=aLine.substr(aLine.find(' '));  
+23.        Mode=s.substr(1,4);  
+24.    }  
+25.    //判断此时的类型  
+26.    if(Mode.find("s")!=string::npos) is_s=1;  
+27.    if(Mode.find("p")!=string::npos) is_p=1;  
+28.    if(Mode.find("w")!=string::npos) is_w=1;  
+29.    if(is_p&&is_w) is_wp=1;  
+30.    int k=Mode.find("p");  
+31.    if(k!=string::npos) Mode[k]='-';  
+32.    return Mode.append("-");  
+33.}  
+34.  
+35.string get_offset(string &aLine){//得到偏移量  
+36.    string offset;  
+37.    if(aLine[0]=='f') offset=aLine.substr(39,8);  
+38.    else {  
+39.        string s;  
+40.        s=aLine.substr(aLine.find(' '));  
+41.        offset=s.substr(6,8);  
+42.    }  
+43.    return "00000000"+offset;//补全16位  
+44.}  
+45.bool is_last=0;//判断要不要输出最后的MAPPing，还是全部的文件名  
+46.string get_Mapping(string &aLine){  
+47.    string totMapping;string lastMapping;  
+48.    int ds=aLine.find_last_of('/');  
+49.    if(ds!=string::npos){  
+50.        int k=aLine.find_first_of('/');   
+51.        lastMapping=aLine.substr(ds+1);  
+52.        totMapping=aLine.substr(k);  
+53.    }  
+54.    else{  
+55.        char back = aLine.back();  
+56.        if(back==']'){  
+57.            if(aLine.find("stack")!=string::npos){  
+58.                lastMapping="   [stack]";  
+59.                totMapping="    [stack]";  
+60.            }  
+61.            else{  
+62.                lastMapping="   [anon]";  
+63.                totMapping="    [anon]";  
+64.            }  
+65.        }  
+66.        else{  
+67.            lastMapping="   [anon]";  
+68.            totMapping="    [anon]";  
+69.        }  
+70.    }  
+71.    if(is_last) return lastMapping;  
+72.    else return totMapping;  
+73.}  
+74.  
+75.string get_Device(string &aLine){//得到device序列号  
+76.    string Device;  
+77.    if(aLine[0]=='f') Device=aLine.substr(48,5);  
+78.    else {  
+79.        int k=aLine.find_first_of(':');  
+80.        Device=aLine.substr(k-2,5);  
+81.    }  
+82.    return "0"+Device.insert(3,"000");  
+83.}  
+84.  
+85.string get_num(string &aLine){//得到所需要的kb,Rss等  
+86.    string numberStr;  
+87.    int start = aLine.find_first_of("0123456789");  
+88.    int end = aLine.find_last_of("0123456789");  
+89.    numberStr = aLine.substr(start, end - start + 1);  
+90.    return numberStr;  
+91.}  
+92.  
+93.struct node{  
+94.    string address;  
+95.    string Kbytes;  
+96.    string KbytesK;  
+97.    string RSS;  
+98.    string device;  
+99.    string dirty;  
+100.    string Mode;  
+101.    string lastMapping;  
+102.    string totMapping;  
+103.    string offset;  
+104.    int dir=0;  
+105.}smap;//结构体定义要输出的量  
+106.int totalKbytes = 0, totalRss = 0, totalDirty = 0, totalWP = 0, totalShared = 0;//总体的量   
+107.vector<string> mycmd;  
+108.int main(int argc,char *argv[]){  
+109.    //输入字符，分割字符  
+110.    string cmd;  
+111.    getline(cin,cmd);  
+112.    istringstream iss(cmd);  
+113.    string as,pid;  
+114.    while(iss>>as){  
+115.        mycmd.push_back(as);  
+116.    }  
+117.    if(mycmd.size()<2) {  
+118.        cout<<"error"<<endl;  
+119.        exit(-1);  
+120.    }  
+121.    if(mycmd.size()==2){  
+122.        pid=mycmd[1];  
+123.    }  
+124.    else if(mycmd.size()==3){  
+125.        pid=mycmd[2];  
+126.    }  
+127.    else pid=mycmd[3];  
+128.    //打开文件操作  
+129.    string mySmaps="/proc/";  
+130.    mySmaps=mySmaps+pid+"/smaps";  
+131.    ifstream file;  
+132.    file.open(mySmaps,ios::in);  
+133.    if(!file){  
+134.        cout<<"error";  
+135.        exit(-1);  
+136.    }  
+137.    string aLine;  
+138.    getline(file,aLine);  
+139.    cout << pid << ":   " << get_Mapping(aLine) <<endl; // 输出进程名  
+140.   // for(int i=0;i<mycmd.size();i++)cout<<mycmd[i]<<" "<<endl;  
+141.    if(mycmd[1]=="-d"){  
+142.        cout << "Address           Kbytes Mode  Offset           Device    Mapping\n";  
+143.    }  
+144.    else if(mycmd[1]=="-x"){  
+145.        cout << "Address           Kbytes     RSS   Dirty Mode  Mapping\n";  
+146.    }  
+147.    bool is_end=1;//判断需  
+148.    //处理字符串  
+149.    while(aLine!=""){  
+150.        //totalKbytes = 0, totalRss = 0, totalDirty = 0, totalWP = 0, totalShared = 0;  
+151.          
+152.        if((aLine[0]>='0'&&aLine[0]<='9')||aLine[0]=='f'){  
+153.            smap.address=get_address(aLine);  
+154.            smap.Mode=get_Mode(aLine);  
+155.           // cout<<smap.Mode<<endl;  
+156.            smap.offset=get_offset(aLine);  
+157.            smap.device=get_Device(aLine);  
+158.            is_last=1;smap.lastMapping=get_Mapping(aLine);  
+159.            is_last=0;smap.totMapping=get_Mapping(aLine);  
+160.        }  
+161.        if(aLine.find("Size")==0){  
+162.            smap.Kbytes=get_num(aLine);  
+163.            totalKbytes+=atoi(smap.Kbytes.c_str());  
+164.            if(is_s) totalShared+=atoi(smap.Kbytes.c_str());  
+165.            if(is_wp) totalWP+=atoi(smap.Kbytes.c_str());   
+166.            smap.KbytesK=smap.Kbytes+"K";  
+167.        }  
+168.        if(aLine.find("Rss")==0){  
+169.            smap.RSS=get_num(aLine);  
+170.            totalRss+=atoi(smap.RSS.c_str());  
+171.        }  
+172.        if(aLine.find("Shared_Dirty")==0){  
+173.            smap.dirty=get_num(aLine);  
+174.            smap.dir+=atoi(smap.dirty.c_str());  
+175.        }  
+176.        if(aLine.find("Private_Dirty")==0){  
+177.            smap.dirty=get_num(aLine);  
+178.            smap.dir+=atoi(smap.dirty.c_str());   
+179.        }  
+180.        totalDirty+=smap.dir;  
+181.        if(aLine.find("VmFlags")==0){  
+182.            if(mycmd[1]=="-p"&&mycmd.size()==3){  
+183.                is_end=1;  
+184.                cout<<smap.address<<setw(8)<<smap.KbytesK<<setw(6)<<smap.Mode<<" "<<smap.totMapping<<endl;  
+185.            }  
+186.            else if(mycmd[1]=="-x"&&mycmd.size()==3){  
+187.                is_end=1;  
+188.                cout<<smap.address<<setw(8)<<smap.Kbytes<<setw(8)<<smap.RSS<<setw(8)<<smap.dirty<<setw(6)<<smap.Mode<<" "<<smap.lastMapping<<endl;  
+189.            }  
+190.            else if(mycmd[1]=="-d"&&mycmd.size()==3){  
+191.                is_end=1;  
+192.                cout<<smap.address<<setw(8)<<smap.Kbytes<<" "<<smap.Mode<<" "<<smap.offset<<" "<<smap.device<<" "<<smap.lastMapping<<endl;  
+193.            }  
+194.            else if(mycmd[1]=="-q"&&mycmd.size()==3){  
+195.                is_end=1;  
+196.                cout<<smap.address<<setw(8)<<smap.KbytesK<<setw(6)<<smap.Mode<<" "<<smap.lastMapping<<endl;  
+197.            }  
+198.            else if(mycmd[1]=="-x"&&mycmd[2]=="-p"){  
+199.                is_end=1;  
+200.                cout<<smap.address<<setw(8)<<smap.Kbytes<<setw(8)<<smap.RSS<<setw(8)<<smap.dirty<<setw(6)<<smap.Mode<<" "<<smap.totMapping<<endl;  
+201.            }  
+202.            else if(mycmd[1]=="-d"&&mycmd[2]=="-p"){  
+203.                is_end=1;  
+204.                cout<<smap.address<<setw(8)<<smap.Kbytes<<" "<<smap.Mode<<" "<<smap.offset<<" "<<smap.device<<" "<<smap.totMapping<<endl;  
+205.            }  
+206.            else if(mycmd[1]=="-x"&&mycmd[2]=="-q"){  
+207.                cout<<smap.address<<setw(8)<<smap.Kbytes<<setw(8)<<smap.RSS<<setw(8)<<smap.dirty<<setw(6)<<smap.Mode<<" "<<smap.lastMapping<<endl;  
+208.                is_end=0;  
+209.            }  
+210.            else if(mycmd[1]=="-d"&&mycmd[2]=="-q"){  
+211.                cout<<smap.address<<setw(8)<<smap.Kbytes<<" "<<smap.Mode<<" "<<smap.offset<<" "<<smap.device<<" "<<smap.lastMapping<<endl;  
+212.                is_end=0;  
+213.            }  
+214.            else{  
+215.                cout<<smap.address<<setw(8)<<smap.KbytesK<<setw(6)<<smap.Mode<<" "<<smap.lastMapping<<endl;   
+216.                is_end=1;  
+217.            }  
+218.        }  
+219.        getline(file,aLine);  
+220.    }  
+221.    if(is_end){  
+222.        if(mycmd.size()==2){  
+223.            cout<<" total"<<setw(18)<<totalKbytes<<"K"<<endl;  
+224.            file.close();  
+225.            exit(-1);  
+226.        }  
+227.        if((mycmd[1]=="-x"&&mycmd.size()==3)||(mycmd[2]=="-x"&&mycmd[3]=="-p"&&mycmd.size()==4)){  
+228.            cout<<"---------------- ------- ------- ------- "<<endl;  
+229.            cout<<"total  KB"<<setw(16)<<totalKbytes<<setw(8)<<totalRss<<setw(8)<<totalDirty<<endl;  
+230.            file.close();  
+231.            exit(-1);  
+232.        }  
+233.        if((mycmd[1]=="-d"&&mycmd.size()==3)||(mycmd[2]=="-d"&&mycmd[3]=="-p"&&mycmd.size()==4)){  
+234.            cout << "mapped: " << totalKbytes<<"K"<< "    writeable/private: " << totalWP<<"K"<< "    shared: " << totalShared<<"K" << "\n";  
+235.            file.close();  
+236.            exit(-1);  
+237.        }  
+238.        if(mycmd[1]=="-p"&&mycmd.size()==2){  
+239.            cout<<" total"<<setw(18)<<totalKbytes<<"K"<<endl;  
+240.            file.close();  
+241.            exit(-1);  
+242.        }  
+243.    }  
+244.      
+245.      
+246.    return 0;  
+247.}  
