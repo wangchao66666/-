@@ -1,0 +1,106 @@
+Pctl.c:
+
+#include "pctl.h"
+
+int main(int argc, char *argv[]) {
+//如果在命令行上没输入子进程要执行的命令 //则执行缺省的命令
+
+     while(1){
+            int i;
+            int pid1,pid2; //存放子进程号
+            int status; //存放子进程返回状态
+            char *args1[] = {"/bin/ls","-a",NULL}; //子进程要缺省执行的命令
+            char *args2[]={"/bin/ps","-a",NULL};     
+            signal(SIGINT,(__sighandler_t)sigcat); //注册一个本进程处理键盘中断的函数   
+            perror("SIGINT");  //如果系统调用signal成功执行，输出”SIGINT”，否则，
+            //输出”SIGINT”及出错原因
+            pid1=fork() ; //建立子进程
+            if(pid1<0){
+              printf("Create Process fail!\n");
+              exit(EXIT_FAILURE); 
+            }
+            if(pid1==0){
+                  printf("I am child one process %d,my father is %d\n", getpid(), getppid());
+			pause();
+			printf("process %d is continue to run\n", getpid());
+                  if(argv[1] != NULL){
+                      for(i=1; argv[i] != NULL; i++) 
+                      printf("%s ",argv[i]); printf("\n");
+                       //装入并执行新的程序
+
+                      status = execve(argv[1],&argv[1],NULL);
+                  }
+                  else{
+                    //如果命令行参数没给出子进程要执行的程序，即运行程序时没有命令行参数 
+                    //则执行缺省的命令，即ls -a
+                   for(i=0; args1[i] != NULL; i++) 
+                      printf("%s ",args1[i]); printf("\n");
+                   //装入并执行新的程序
+                   status = execve(args1[0],args1,NULL);
+                  } 
+            }
+            if(pid1>0){
+                  printf("\nI am Parent process	%d\n",getpid()); //报告父进程进程号
+                  pid2=fork();
+                  if(pid2<0){
+                     printf("Create Process fail!\n");
+                     exit(EXIT_FAILURE); 
+                  }
+                  if(pid2==0){
+                        printf("I am child two process %d,my father is %d\n", getpid(), getppid());
+                        status =execve(args2[0],args2,NULL);
+                  }
+                  if(pid2>0){
+                      printf("%d	 Waiting for child two done.\n\n",getpid());
+                      waitpid(pid2,&status,0);	//等待子进程结束        
+                      printf("\nMy child two exit! status = %d\n\n",status);
+                  }
+                  if(argv[1] != NULL){
+                      //如果在命令行上输入了子进程要执行的命令
+                      //则父进程等待子进程执行结束
+                      printf("%d	 Waiting for child  one done.\n\n",getpid());
+                      waitpid(pid1,&status,0);	//等待子进程结束        
+                      printf("\nMy child one exit! status = %d\n\n",status);
+                  }
+                  else{
+                     //如果在命令行上没输入子进程要执行的命令
+                     //唤醒子进程，与子进程并发执行不等待子进程执行结束
+                     sleep(5); //思考：如果去掉这条语句，可能会出现什么现象
+                     if(kill(pid1,SIGINT) >= 0)
+                        printf("%d Wakeup %d child.\n",getpid(),pid1) ; 
+                      printf("%d don't Wait for child one done.\n\n",getpid());
+                  }
+            }
+         sleep(3);
+      }
+      
+      
+       return EXIT_SUCCESS;
+}
+
+
+Pctl.h:
+#include <sys/types.h>
+#include <wait.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h> //进程自定义的键盘中断信号处理函数 typedef void (*sighandler_t) (int);
+void sigcat(){
+	printf("%d Process continue\n",getpid());
+}
+
+
+Makefile:
+
+head=pctl.h
+srcs=pctl.c
+objs=pctl.o
+opts= -g -c
+all:pctl
+pctl: $(objs)
+	gcc $(objs) -o pctl
+pctl.o: $(srcs) $(head)
+	gcc $(opts) $(srcs)
+clean:
+	rm pctl*.o
