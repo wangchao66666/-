@@ -1,0 +1,117 @@
+1.#include <stdio.h>   
+2.#include <unistd.h>   
+3.#include <stdlib.h>  
+4.#include <pthread.h>  
+5.  
+6.int fx(int x){  
+7.    if(x==1) return 1;  
+8.    else return fx(x-1)*x;  
+9.}  
+10.int fy(int y){  
+11.    if(y<=2) return 1;  
+12.    else return fy(y-1)+fy(y-2);  
+13.}  
+14.void task1(int x);    //线程 1 执行函数原型  
+15.void task2(int y);    //线程 2 执行函数原型  
+16.void task3(int *);    //线程 2 执行函数原型  
+17.int pipe1[2],pipe2[2],pipe3[2],pipe4[2];   //存放四个无名管道标号  
+18.pthread_t thrd1,thrd2,thrd3;   //存放三个线程标识  
+19.  
+20.int main(int argc,char *arg[])  
+21.{  
+22.      int ret;  
+23.      int x,y;  
+24.      int node[2];  
+25.      printf("请输入x,y的值\n");  
+26.      scanf("%d%d",&x,&y);  
+27.      node[0]=x;  
+28.      node[1]=y;  
+29.      //使用 pipe()系统调用建立四个无名管道。建立不成功程序退出，执行终止  
+30.      if(pipe(pipe1) < 0){  
+31.            perror("pipe1 not create");   
+32.            exit(EXIT_FAILURE);  
+33.      }  
+34.      if(pipe(pipe2) < 0)  
+35.      {   
+36.            perror("pipe2 not create");  
+37.            exit(EXIT_FAILURE);  
+38.      }  
+39.      if(pipe(pipe3) < 0)  
+40.      {   
+41.            perror("pipe3 not create");  
+42.            exit(EXIT_FAILURE);  
+43.      }  
+44.      if(pipe(pipe4) < 0)  
+45.      {   
+46.            perror("pipe4 not create");  
+47.            exit(EXIT_FAILURE);  
+48.      }  
+49.      //使用 pthread_create 系统调用建立两个线程。建立不成功程序退出，执行终止  
+50.      ret = pthread_create(&thrd1,NULL,(void *) task1,(void *) &x);   
+51.      if(ret){  
+52.            perror("pthread_create: task1");   
+53.            exit(EXIT_FAILURE);  
+54.      }  
+55.      ret = pthread_create(&thrd2,NULL,(void *) task2,(void *) &y);  
+56.      if(ret){  
+57.            perror("pthread_create: task2");   
+58.            exit(EXIT_FAILURE);  
+59.      }  
+60.  
+61.      ret = pthread_create(&thrd3,NULL,(void *) task3,(void *) &node);  
+62.      if(ret){  
+63.            perror("pthread_create: task3");   
+64.            exit(EXIT_FAILURE);  
+65.      }  
+66.      pthread_join(thrd3,NULL);  
+67.      
+68.      //挂起当前线程，等待线程thrd2结束，并回收其资源   
+69.     pthread_join(thrd2,NULL);    
+70.       //挂起当前线程，等待线程thrd1结束，并回收其资源  
+71.      pthread_join(thrd1,NULL);   
+72.  
+73.        //思考与测试：如果去掉上述两个pthread_join的函数调用，会出现什么现象  
+74.      exit(EXIT_SUCCESS);  
+75.}  
+76.//线程 1 执行函数，它首先向管道1写，然后从管道2读  
+77.void task1(int x)  
+78.{  
+79.      //pipe1[0]读出x,计算出ansx,放入pipe2[1]中;  
+80.      
+81.    read(pipe1[0],&x,sizeof(int));  
+82.    int ansx=fx(x);  
+83.    write(pipe2[1],&ansx,sizeof(int));  
+84.  //读写完成后,关闭管道  
+85.  close(pipe1[0]);  
+86.  close(pipe2[1]);  
+87.}  
+88.//线程 2 执行函数，它首先从管道1读，然后向管道2写  
+89.void task2(int y)  
+90.{  
+91.      //pipe3[0]读出y，计算ansy,放入pipe4[1]中;  
+92.         
+93.       read(pipe3[0],&y,sizeof(int));   
+94.       int ansy=fy(y);  
+95.       write(pipe4[1],&ansy,sizeof(int));  
+96.//读写完成后,关闭管道  
+97.      close(pipe3[0]);  
+98.      close(pipe4[1]);  
+99.}  
+100.void task3(int *node){  
+101.    //从管道pipe[1]中写入node[0],即x的值，从管道pipe3[1]中写入node[1]的值即y的值  
+102.    write(pipe1[1],&node[0],sizeof(int));  
+103.    write(pipe3[1],&node[1],sizeof(int));  
+104.    int ansx,ansy;  
+105.    //从管道pipe2[0]中读取ansx的值，从pipe4[0]中读取ansy的值;  
+106.    read(pipe2[0],&ansx,sizeof(int));  
+107.    read(pipe4[0],&ansy,sizeof(int));  
+108.    printf("f(x)的计算结果是：%d\n",ansx);  
+109.    printf("f(y)的计算结果是：%d\n",ansy);  
+110.    int ans=ansx+ansy;  
+111.    printf("最终结果是：%d\n",ans);  
+112.    close(pipe1[1]);  
+113.    close(pipe2[0]);  
+114.    close(pipe3[1]);  
+115.    close(pipe4[0]);  
+116.}  
+
