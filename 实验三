@@ -1,0 +1,191 @@
+1.#include<stdio.h>
+2.#include<unistd.h>
+3.#include<stdlib.h>
+4.#include<sys/types.h>
+5.#include<sys/stat.h>
+6.#include<sys/wait.h>
+7.#include<string.h>
+8.#include<ctype.h>
+9.#include<fcntl.h>
+10.#include <termio.h>
+11.#include <bits/stdc++.h>
+12.#define MAX_LINE 100;    /* 限定用户输入的命令行长度不超过100字符*/
+13.using namespace std;
+14.
+15.#define     UP      "\033[A"
+16.#define     DOWN    "\033[B"
+17.void sig_exit(int  sig_num){
+18.    printf("receive interrupt:%d\n", sig_num);
+19.    exit(0);
+20.}
+21.vector<char> jilu[30];
+22.int k=0;
+23.int main(void){
+24.    
+25.    int background;
+26.    while(1){
+27.        int is_up=0;
+28.        int is_down=0;
+29.        background=0;
+30.        
+31.        printf("[user@host path]# ");  //简单描写的用户名
+32.        fflush(stdin);
+33.        signal(SIGINT, sig_exit);
+34.        char cmd[100];
+35.        char *myargc[100]={NULL};
+36.        
+37.        fgets(cmd,100,stdin);
+38.        if(cmd[0]=='\n') continue;
+39.        int i;
+40.        for (i = 0; cmd[i] != '\n'; i++);
+41.        cmd[i] = '\0';
+42.        if(!strcmp(cmd,UP)){
+43.            is_up=1;
+44.            //printf("%d\n",cmd[0]);
+45.        }
+46.        if(!strcmp(cmd,DOWN)){
+47.            is_down=1;
+48.        }
+49.        if(!is_up&&!is_down){
+50.            int j;
+51.            for(j=0;cmd[j]!='\0';j++){
+52.                jilu[k].push_back(cmd[j]);
+53.            }
+54.            jilu[k][j]='\0';
+55.            k++;
+56.            k=(k+30)%30;
+57.        }
+58.        if(is_up){
+59.            k=(k-1+30)%30;
+60.            //int m=jilu[k].size();
+61.            //printf("%d\n",m);
+62.            for(int m=0;m<jilu[k].size();m++){
+63.                cmd[m]=jilu[k][m];
+64.            }
+65.            cmd[jilu[k].size()]='\0';
+66.            printf("%s\n",cmd);
+67.        }
+68.        if(is_down){
+69.            k=(k+1+30)%30;
+70.           for(int i=0;i<jilu[k].size();i++){
+71.                cmd[i]=jilu[k][i];
+72.            }
+73.            cmd[jilu[k].size()]='\0';
+74.            printf("%s\n",cmd);
+75.        }
+76.        
+77.        
+78.        // for(int p=0;p<k;p++){
+79.        //     for(int j=0;j<jilu[p].size();j++){
+80.        //         printf("%c",jilu[p][j]);
+81.        //     }
+82.        //     printf("\n");
+83.        // }
+84.
+85.        char *start=cmd;
+86.        int length=0;
+87.        while(*start!='\0'){
+88.            while(isspace(*start)&&*start!='\0'){
+89.                *start='\0';
+90.                start++;
+91.            }
+92.            myargc[length++]=start;
+93.            while(!isspace(*start)&&*start!='\0') 
+94.            {
+95.                start++;
+96.            }
+97.        }
+98.        if(strcmp(myargc[length-1],"&")==0) background=1;
+99.        myargc[length]=NULL;
+100.        pid_t pid1=fork();
+101.        if(pid1==0){
+102.            int i;
+103.            int flag=0;
+104.            for(i=0;myargc[i]!=0&&strcmp(myargc[i],">")!=0;i++);
+105.            if(myargc[i]!=NULL){
+106.                int fd;
+107.                fd=open(myargc[i+1],O_WRONLY|O_CREAT,07777);
+108.                //printf("%s\n",myargc[i+1]);
+109.                for (i ; myargc[i] != NULL ; i++)
+110.                           myargc[i] = NULL ;
+111.                close(1);
+112.                dup(fd);
+113.                close(fd);
+114.            }
+115.            for(i=0;myargc[i]!=0&&strcmp(myargc[i],"<")!=0;i++);
+116.            if(myargc[i]!=0){
+117.                int fd;
+118.                //printf("%s\n",myargc[i+1]);
+119.                fd=open(myargc[i+1],O_RDONLY);
+120.                for (i ; myargc[i+1] != NULL ; i++)
+121.            myargc[i] = NULL ;
+122.                //myargc[i]=NULL;
+123.                 close(0);
+124.                dup(fd);
+125.                close(fd);
+126.            }
+127.            for(i=0;myargc[i]!=0&&strcmp(myargc[i],"|")!=0;i++);
+128.            if(myargc[i]!=0){
+129.                flag=1;
+130.                myargc[i]=NULL;
+131.            }
+132.            if(flag){
+133.                int m=0;
+134.                char *argc[12000];
+135.                for(int j=i+1;myargc[j]!=NULL;j++){
+136.                    argc[m++]=myargc[j];
+137.                }
+138.                m--;
+139.                int filedes[2] ;
+140.          pipe(filedes) ;
+141.          pid_t pid = fork() ;
+142.          if (pid < 0)
+143.          {
+144.           puts("Error!") ;
+145.           exit(-1) ;
+146.          }
+147.                else if(pid==0){
+148.                   // printf("%s %d\n",myargc[0],flag);
+149.                    close(1);
+150.                    dup(filedes[1]);
+151.                    close(filedes[0]);
+152.                    close(filedes[1]);
+153.                    execvp(myargc[0],myargc);
+154.                    exit(1);
+155.                }
+156.                else if(pid>0){
+157.                    waitpid(pid,NULL,0);
+158.                    //printf("%s %d\n",argc[0],flag);
+159.                    close(0);
+160.                    dup(filedes[0]);
+161.                    close(filedes[0]);
+162.                    close(filedes[1]);
+163.                    execvp(argc[0],argc);
+164.                }
+165.            }         
+166.            if(!flag){
+167.                execvp(myargc[0],myargc);
+168.            }
+169.            
+170.        }
+171.        else{
+172.            if(!background){
+173.                waitpid(pid1,NULL,0);
+174.                
+175.            }
+176.            else{
+177.            printf("不等待子进程执行 \n");
+178.            }
+179.        }
+180.
+181.        // for(int i=0;i<k;i++){
+182.        //     for(int j=0;j<jilu[i].size();j++){
+183.        //         printf("%c",jilu[k][j] );
+184.
+185.        //     }
+186.        //     printf("\n");
+187.        // }
+188.
+189.    }
+190.    return 0;
+191.}
