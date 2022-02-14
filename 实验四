@@ -1,0 +1,297 @@
+Ipc.h:
+1.#include <stdio.h>  
+2.#include <stdlib.h>  
+3.#include <sys/types.h>  
+4.#include <sys/ipc.h>  
+5.#include <sys/shm.h>  
+6.#include <sys/sem.h>  
+7.#include <sys/msg.h>  
+8.  
+9.#define BUFSZ   256    //建立或获取 ipc 的一组函数的原型说明  
+10.  
+11.int get_ipc_id(char *proc_file,key_t key);  
+12.char *set_shm(key_t shm_key,int shm_num,int shm_flag);  
+13.int set_msq(key_t msq_key,int msq_flag);  
+14.int set_sem(key_t sem_key,int sem_val,int sem_flag);  
+15.int down(int sem_id);  
+16.int up(int sem_id);  
+17.  
+18./*信号灯控制用的共同体*/  
+19.typedef union semuns {  
+20.    int val;  
+21.} Sem_uns;  
+22.  
+23./* 消息结构体*/  
+24.typedef struct msgbuf {  
+25.    long mtype;  
+26.    char mtext[1];  
+27.} Msg_buf;  
+28.  
+29.//生产消费者共享缓冲区即其有关的变量  
+30.key_t buff_key;  int buff_num;  char *buff_ptr;  
+31.  
+32.//生产者放产品位置的共享指针  
+33.key_t pput_key;  int pput_num;  
+34.int *pput_ptr;  
+35.  
+36.//消费者取产品位置的共享指针  
+37.key_t cget_key;  
+38.int cget_num;  
+39.int *cget_ptr;  
+40.int buff_num;  
+41.int pput_num;  
+42.int buff_number;  
+43.int pput_number;  
+44.int cget_number;  
+45.  
+46.key_t pput_h;  
+47.key_t prod_h;  
+48.key_t pmtx_h;  
+49.key_t cons_h;  
+50.key_t cmtx_h;  
+51.  
+52.key_t buff_h;  
+53.key_t cget_h;  
+54.  
+55.//生产者有关的信号量  
+56.key_t prod_key;  
+57.key_t pmtx_key;  
+58.int prod_sem;  
+59.int pmtx_sem;  
+60.  
+61.//消费者有关的信号量  
+62.key_t cons_key;  
+63.key_t cmtx_key;  
+64.int cons_sem;  
+65.int cmtx_sem;  
+66.int sem_val;  
+67.int sem_flg;  
+68.int shm_flg;  
+
+Ipc.c
+1.#include "ipc.h"  
+2.  
+3.int get_ipc_id(char *proc_file,key_t key) {  
+4.    FILE *pf;  
+5.    int i,j;  
+6.    char line[BUFSZ],colum[BUFSZ];  
+7.    if((pf = fopen(proc_file,"r")) == NULL){  
+8.        perror("Proc file not open");  
+9.        exit(EXIT_FAILURE);  
+10.    }  
+11.    fgets(line, BUFSZ,pf);  
+12.    while(!feof(pf)){  
+13.        i = j = 0;  
+14.        fgets(line, BUFSZ,pf);  
+15.        while(line[i] == ' ') i++;  
+16.        while(line[i] !=' ')  
+17.            colum[j++] = line[i++];  
+18.            colum[j] = '\0';  
+19.        if(atoi(colum) != key)  
+20.            continue;  
+21.        j=0;  
+22.        while(line[i] == ' ')  
+23.            i++;  
+24.        while(line[i] !=' ')  
+25.            colum[j++] = line[i++];  
+26.        colum[j] = '\0';  
+27.        i = atoi(colum);  
+28.        fclose(pf);  
+29.        return i;  
+30.    }  
+31.    fclose(pf);  
+32.    return -1;  
+33.}  
+34.int down(int sem_id) {  
+35.    struct sembuf buf;  
+36.    buf.sem_op = -1;  
+37.    buf.sem_num = 0;  
+38.    buf.sem_flg = SEM_UNDO;  
+39.    if((semop(sem_id,&buf,1)) <0) {  
+40.        perror("down error ");  
+41.        exit(EXIT_FAILURE);  
+42.    }  
+43.    return EXIT_SUCCESS;  
+44.}  
+45.  
+46.int up(int sem_id) {  
+47.    struct sembuf buf;  
+48.    buf.sem_op = 1;  
+49.    buf.sem_num = 0;  
+50.    buf.sem_flg = SEM_UNDO;  
+51.    if((semop(sem_id,&buf,1)) <0) {  
+52.        perror("up error ");  
+53.        exit(EXIT_FAILURE);  
+54.    }  
+55.    return EXIT_SUCCESS;  
+56.}  
+57.  
+58.int set_sem(key_t sem_key,int sem_val,int sem_flg) {  
+59.    int sem_id;  Sem_uns sem_arg;  
+60.  
+61.    //测试由 sem_key 标识的信号灯数组是否已经建立  
+62.    if((sem_id = get_ipc_id("/proc/sysvipc/sem",sem_key)) < 0 ){  
+63.        //semget 新建一个信号灯,其标号返回到 sem_id  
+64.        if((sem_id = semget(sem_key,1,sem_flg)) < 0){  
+65.            perror("semaphore create error");  
+66.            exit(EXIT_FAILURE);  
+67.        }  
+68.        //设置信号灯的初值  
+69.        sem_arg.val = sem_val;  
+70.        if(semctl(sem_id,0,SETVAL,sem_arg) <0){  
+71.            perror("semaphore set error");  
+72.            exit(EXIT_FAILURE);  
+73.        }  
+74.    }  
+75.   return sem_id;  
+76.}  
+77.  
+78.char * set_shm(key_t shm_key,int shm_num,int shm_flg) {  
+79.    int i,shm_id;  
+80.    char * shm_buf;  
+81.  
+82.    //测试由 shm_key 标识的共享内存区是否已经建立  
+83.    if((shm_id = get_ipc_id("/proc/sysvipc/shm",shm_key)) < 0 ){  
+84.        //shmget 新建 一个长度为 shm_num 字节的共享内存,其标号返回到 shm_id  
+85.        if((shm_id = shmget(shm_key,shm_num,shm_flg)) <0){  
+86.            perror("shareMemory set error");  
+87.        exit(EXIT_FAILURE);  
+88.    }  
+89.    //shmat 将由 shm_id 标识的共享内存附加给指针 shm_buf  
+90.    if((shm_buf = (char *)shmat(shm_id,0,0)) < (char *)0){  
+91.        perror("get shareMemory error");  
+92.        exit(EXIT_FAILURE);  
+93.    }  
+94.    for(i=0; i<shm_num; i++) shm_buf[i] = 0;  
+95.        //初始为 0  
+96.    }  
+97.    //shm_key 标识的共享内存区已经建立,将由 shm_id 标识的共享内存附加给指 针 shm_buf  
+98.    if((shm_buf = (char *)shmat(shm_id,0,0)) < (char *)0){  
+99.        perror("get shareMemory error");  
+100.        exit(EXIT_FAILURE);  
+101.    }  
+102.return shm_buf;  
+103.}  
+104.  
+105.int set_msq(key_t msq_key,int msq_flg){  
+106.    int msq_id;  
+107.    //测试由 msq_key 标识的消息队列是否已经建立  
+108.    if((msq_id = get_ipc_id("/proc/sysvipc/msg",msq_key)) < 0 ){  
+109.            //msgget 新建一个消息队列,其标号返回到 msq_id  
+110.        if((msq_id = msgget(msq_key,msq_flg)) < 0){  
+111.            perror("messageQueue set error");  
+112.        exit(EXIT_FAILURE);  
+113.        }  
+114.    }  
+115.    return msq_id;  
+116.}  
+
+Producer.c
+1.#include "ipc.h"  
+2.int main(int argc,char *argv[]){  
+3.    int rate=3;  
+4.    int producerid=atoi(argv[1]);  
+5.    buff_h=101;  
+6.    buff_number=8;  
+7.    pput_h=102;  
+8.    pput_number=1;  
+9.    shm_flg=IPC_CREAT|0644;  
+10.    buff_ptr = (char *)set_shm(buff_h,buff_number,shm_flg);//获取缓冲区使用的共享内存,buff_ptr 指向缓冲区首地址  
+11.    pput_ptr = (int *)set_shm(pput_h,pput_number,shm_flg);//获取生产者放产品位置指针 pput_ptr  
+12.    prod_h = 201;  
+13.    pmtx_h = 202;  
+14.    cons_h = 301;  
+15.    cmtx_h = 302;  
+16.    sem_flg = IPC_CREAT|0644;  
+17.    sem_val = buff_number;  
+18.    prod_sem = set_sem(prod_h,sem_val,sem_flg);  
+19.    sem_val = 0;  
+20.    cons_sem = set_sem(cons_h,sem_val,sem_flg);  
+21.    sem_val = 1;  
+22.    pmtx_sem = set_sem(pmtx_h,sem_val,sem_flg);  
+23.  
+24.  
+25.    if(producerid==0){  
+26.        buff_ptr[0]='D';  
+27.        *pput_ptr=0;  
+28.    }  
+29.    if(producerid==1){  
+30.        buff_ptr[0]='E';  
+31.        *pput_ptr=0;  
+32.    }  
+33.    while(1){  
+34.        if(buff_ptr[0]-'D'==producerid){  
+35.            down(prod_sem);  
+36.            down(pmtx_sem);  
+37.            *pput_ptr = (*pput_ptr+1)%3;  
+38.            if(*pput_ptr==0){  
+39.                buff_ptr[0] = 'A';  
+40.                printf("%d The producer gives tobacco and paper\n",getpid());//A is glue  
+41.            }  
+42.            if(*pput_ptr==1){  
+43.                buff_ptr[0] = 'B';  
+44.                printf("%d The producer gives tobacco and glue\n",getpid());//B is paper  
+45.            }  
+46.            if(*pput_ptr==2){  
+47.                buff_ptr[0] = 'C';  
+48.                printf("%d The producer gives glue and paper\n",getpid());//C is tobacco  
+49.            }  
+50.            sleep(rate);  
+51.              
+52.            up(cons_sem);  
+53.            up(pmtx_sem);  
+54.        }  
+55.    }  
+56.    return EXIT_SUCCESS;  
+57.}  
+
+Consumer.c
+1.#include "ipc.h"  
+2.int main(int argc,char *argv[]) {  
+3.    int rate = 3;  
+4.    int consumerid=atoi(argv[1]);  
+5.    buff_h = 101;  
+6.    buff_number = 8;  
+7.    cget_h = 103;  
+8.    cget_number = 1;  
+9.    shm_flg = IPC_CREAT | 0644;  
+10.    buff_ptr = (char *)set_shm(buff_h,buff_number,shm_flg);  
+11.    cget_ptr = (int *)set_shm(cget_h,cget_number,shm_flg);  
+12.    prod_h = 201;  
+13.    pmtx_h = 202;  
+14.    cons_h = 301;  
+15.    cmtx_h = 302;  
+16.    sem_flg = IPC_CREAT | 0644;  
+17.    sem_val = buff_number;  
+18.    prod_sem = set_sem(prod_h,sem_val,sem_flg);  
+19.    sem_val = 0;  
+20.    cons_sem = set_sem(cons_h,sem_val,sem_flg);  
+21.    sem_val = 1;  
+22.    cmtx_sem = set_sem(cmtx_h,sem_val,sem_flg);  
+23.  
+24.    *cget_ptr=0;  
+25.    while(1){  
+26.        if(buff_ptr[0]-'A'==consumerid){  
+27.            down(cons_sem);  
+28.            down(cmtx_sem);  
+29.            sleep(rate);  
+30.            if(buff_ptr[0]=='A'){  
+31.                printf("%d The consumer has glue.\nThe consumer gets tobacco and paper\n",getpid());  
+32.            }  
+33.            if(buff_ptr[0]=='B'){  
+34.                printf("%d The consumer has paper.\nThe consumer gets tobacco and glue\n",getpid());  
+35.            }  
+36.            if(buff_ptr[0]=='C'){  
+37.                printf("%d The consumer has tobacco.\nThe consumer gets glue and paper\n",getpid());  
+38.            }  
+39.            *cget_ptr = (*cget_ptr+1);//qu cai liao zhi zhen  
+40.            if(*cget_ptr%2==0)//di yi ge producer  
+41.                buff_ptr[0]='D';  
+42.            else  
+43.                buff_ptr[0]='E';//2 producer  
+44.            up(prod_sem);  
+45.            up(cmtx_sem);  
+46.        }  
+47.    }  
+48.    return EXIT_SUCCESS;  
+49.}  
